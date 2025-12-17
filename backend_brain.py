@@ -9,7 +9,7 @@ from langchain_core.messages import SystemMessage
 # 🔑 CONFIGURATION
 # ==========================================
 # REPLACE WITH YOUR REAL KEY
-os.environ["GOOGLE_API_KEY"] = "AIzaSyCqpCTDrwKvv8aUJcBJZ_fWJS6PGNBhMSc" 
+os.environ["GOOGLE_API_KEY"] = "xxx" 
 
 # ==========================================
 # 🧠 REAL-TIME KNOWLEDGE BASE (Mocked for Speed)
