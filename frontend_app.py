@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
-import re
+import plotly.express as px  # <--- NEW IMPORT
 from backend_brain import run_agent_backend
+import re
 
 # --- UI CONFIGURATION ---
 st.set_page_config(page_title="Project Phoenix", layout="wide", page_icon="💊")
 
-# Custom CSS
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: white; }
@@ -16,9 +16,8 @@ st.markdown("""
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063212.png", width=50) # Placeholder Icon
     st.title("Project Phoenix")
-    st.caption("Agentic R&D Discovery Engine")
+    st.caption("powered by Gemini & LangGraph")
     st.divider()
     st.success("✅ Internal DB Connected")
     st.success("✅ IQVIA Market Data Connected")
@@ -26,18 +25,20 @@ with st.sidebar:
     st.info("Agent Status: **ONLINE**")
 
 # --- MAIN CHAT ---
-st.title("💊 In-depth Drug Analyser")
-st.markdown("Ask the Master Agent to find repurposing opportunities for failed drugs.")
+st.title("💊 In-Depth Drug Analyser")
+st.markdown("Ask the Master Agent to scout for repurposing opportunities.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Display History
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        # Check if this message had a chart attached
+        if isinstance(msg, dict) and "chart_data" in msg:
+            st.plotly_chart(msg["chart_data"], key=f"hist_{msg['content'][:5]}")
 
-# Helper: Strip Markdown for cleaner display
 def strip_markdown(md_text):
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', md_text)  # bold
     text = re.sub(r'\*(.*?)\*', r'\1', text)         # italics
@@ -45,7 +46,7 @@ def strip_markdown(md_text):
     return text
 
 # --- INPUT ---
-if prompt := st.chat_input("Enter your R&D Query..."):
+if prompt := st.chat_input("Enter R&D Query..."):
     # 1. User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -54,20 +55,52 @@ if prompt := st.chat_input("Enter your R&D Query..."):
     # 2. AI Response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        full_response_text = ""
-
+        full_response = ""
+        chart_to_save = None
+        
         with st.spinner("Agent is reasoning..."):
             # STREAM THE REAL STEPS
             for step in run_agent_backend(prompt):
-
+                
                 # A. Handle Tool Calls
                 if hasattr(step, 'tool_calls') and len(step.tool_calls) > 0:
                     for tool_call in step.tool_calls:
                         tool_name = tool_call['name']
                         tool_args = tool_call['args']
                         with st.expander(f"🤖 Action: Calling {tool_name}..."):
-                            st.write(' '.join(f'{k}={v}' for k, v in tool_args.items()))
+                            # Format: key=value key2=value2
+                            if isinstance(tool_args, dict):
+                                args_str = " ".join(f"{k}={v}" for k, v in tool_args.items())
+                            else:
+                                args_str = str(tool_args)
+                            st.write(args_str)
 
+                            
+                            # --- 📊 THE NEW FIGURE MODEL (CHART) ---
+                            # If the agent is checking Market Data, show a Chart!
+                            if tool_name == "iqvia_market_search":
+                                st.write("📊 **Generating IQVIA Market Analysis...**")
+                                
+                                # Create a Mock DataFrame for the Visualization
+                                df = pd.DataFrame({
+                                    "Indication": ["Angina (Original)", "Erectile Dysfunction (New)"],
+                                    "Market Size (Billions)": [0.5, 10.0],
+                                    "Growth Rate": ["2%", "8.5%"]
+                                })
+                                
+                                fig = px.bar(
+                                    df, 
+                                    x="Indication", 
+                                    y="Market Size (Billions)", 
+                                    color="Indication",
+                                    title="Market Opportunity Comparison",
+                                    text="Growth Rate",
+                                    color_discrete_sequence=["#FF6B6B", "#4ECDC4"]
+                                )
+                                fig.update_layout(template="plotly_dark")
+                                st.plotly_chart(fig)
+                                chart_to_save = fig # Save for history
+                
                 # B. Handle Content
                 elif hasattr(step, "content") and step.content:
                     # Normalise step.content to a string
@@ -85,15 +118,16 @@ if prompt := st.chat_input("Enter your R&D Query..."):
 
                     clean_text = strip_markdown(raw_text)
                     message_placeholder.text_area("AI Output", value=clean_text, height=300)
-                    full_response_text += clean_text + "\n\n"
+                    full_response += clean_text + "\n\n"
 
 
         # Highlight Success
-        if "Sildenafil" in full_response_text or "Innovation" in full_response_text:
-             st.markdown(
-                 '<div class="success-box"><h3>🚀 Opportunity Detected</h3></div>',
-                 unsafe_allow_html=True
-             )
-
-    # Save History
-    st.session_state.messages.append({"role": "assistant", "content": full_response_text})
+        if "Sildenafil" in full_response or "Innovation" in full_response:
+             st.markdown('<div class="success-box"><h3>🚀 Opportunity Detected</h3></div>', unsafe_allow_html=True)
+    
+    # Save History (With Chart if it exists)
+    msg_obj = {"role": "assistant", "content": full_response}
+    if chart_to_save:
+        msg_obj["chart_data"] = chart_to_save
+    
+    st.session_state.messages.append(msg_obj)
