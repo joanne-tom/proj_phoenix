@@ -1,7 +1,7 @@
 from google import genai
 
 client = genai.Client(
-    api_key="AIzaSyDNlsBJ6B0EaU83fFS-9sx9HwgR6hBf2YA"
+    api_key="xxx"
 )
 
 for model in client.models.list():
